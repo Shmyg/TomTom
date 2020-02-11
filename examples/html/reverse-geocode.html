@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html class='use-all-space'>
+<head>
+    <meta http-equiv='X-UA-Compatible' content='IE=Edge' />
+    <meta charset='UTF-8'>
+    <title>Maps SDK for Web - Reverse geocode</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no' />
+    <link rel='stylesheet' type='text/css' href='/cdn.web-sdk-maps/maps.css' />
+    <link rel='stylesheet' type='text/css' href='../assets/ui-library/index.css' />
+    <link rel='stylesheet' type='text/css' href='/cdn.web-sdk-maps/css-styles/poi.css' />
+</head>
+<body>
+    <script data-showable type='text/javascript' src='../assets/js/validators.js'></script>
+    <script data-showable type='text/javascript' src='../assets/js/antimeridian-handler.js'></script>
+    <script data-showable type='text/javascript' src='../assets/js/info-hint.js'></script>
+    <script src='/cdn.web-sdk-maps/maps-web.min.js'></script>
+    <script src='/cdn.web-sdk-services/services-web.min.js'></script>
+    <script data-showable type='text/javascript' src='../assets/js/mobile-or-tablet.js'></script>
+    <div class='map-view'>
+        <div id='map' class='full-map'></div>
+    </div>
+    <script>
+        var tt = window.tt;
+        tt.setProductInfo('<your-product-name>', '<your-product-version>');
+        var map = window.tt.map({
+            key: '${api.key.maps}',
+            container: 'map',
+            style: 'tomtom://vector/1/basic-main',
+            center: [4.3705, 50.8515],
+            zoom: 12,
+            dragPan: !window.isMobileOrTablet()
+        });
+
+        map.addControl(new window.tt.FullscreenControl());
+        map.addControl(new window.tt.NavigationControl());
+
+        function ReverseGeocode() {
+            this.errorHint = new window.InfoHint('error', 'bottom-center', 3000)
+                .addTo(document.getElementById('map'));
+
+            this.isRequesting = false;
+            this.marker = null;
+            this.popup = new window.tt.Popup({ className: 'tt-popup' })
+                .setHTML('Click anywhere on the map to get position.')
+                .setLngLat(new window.tt.LngLat(4.3705, 50.8515))
+                .addTo(map);
+
+            map.on('click', this.handleMapClick.bind(this));
+        }
+
+        ReverseGeocode.prototype.handleResponse = function(response) {
+            this.errorHint.hide();
+
+            var result = response.addresses[0];
+            var popupAddress = document.createElement('strong');
+
+            if (result.address.freeformAddress) {
+                popupAddress.innerText = result.address.freeformAddress;
+            } else {
+                popupAddress.innerText = 'No result found';
+                this.errorHint.setMessage('No result found for given position');
+            }
+
+            var popupContent = document.createElement('div');
+            popupContent.appendChild(popupAddress);
+
+            this.popup.setDOMContent(popupContent);
+        };
+
+        ReverseGeocode.prototype.setPopup = function(lnglat) {
+            this.popup = new tt.Popup({ offset: [0, -30] })
+                .setLngLat(new tt.LngLat(lnglat[0], lnglat[1]))
+                .setHTML('Loading...');
+
+            this.popup.addTo(map);
+
+            var markerElement = document.createElement('div');
+            markerElement.setAttribute('class', 'tt-marker -start');
+
+            this.marker = new tt.Marker(markerElement)
+                .setLngLat(new tt.LngLat(lnglat[0], lnglat[1]));
+
+            this.marker.addTo(map);
+        };
+
+        ReverseGeocode.prototype.removePopup = function() {
+            if (this.marker && this.popup) {
+                this.marker.remove();
+                this.marker = null;
+
+                this.popup.remove();
+                this.popup = null;
+            }
+        };
+
+        ReverseGeocode.prototype.handleMapClick = function(event) {
+            if (event.originalEvent.target.classList.contains('tt-marker')) {
+                return;
+            }
+
+            var pos = event.lngLat.toArray();
+            map.panTo(pos);
+            this.removePopup();
+            this.setPopup(pos);
+
+            if (this.isRequesting) {
+                return;
+            }
+
+            this.isRequesting = true;
+
+            window.tt.services.reverseGeocode({
+                key: '${api.key.search}',
+                position: [pos[0], pos[1]],
+                language: 'en-US'
+            })
+                .go()
+                .then(this.handleResponse.bind(this))
+                .catch(function(error) {
+                    this.errorHint.setMessage(error.data ? error.data.errorText : error);
+                }.bind(this))
+                .finally(function() {
+                    this.isRequesting = false;
+                }.bind(this));
+        };
+
+        new ReverseGeocode();
+    </script>
+</body>
+
+</html>
